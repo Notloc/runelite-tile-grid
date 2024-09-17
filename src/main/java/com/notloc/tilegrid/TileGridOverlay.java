@@ -47,13 +47,15 @@ class TileGridOverlay extends Overlay {
 
     @Override
     public Dimension render(Graphics2D graphics) {
-        long currentTime = System.nanoTime();
-
         Player player = client.getLocalPlayer();
         WorldView wv = client.getTopLevelWorldView();
 
         WorldPoint wPos = player.getWorldLocation();
         LocalPoint pos = LocalPoint.fromWorld(wv, wPos);
+        if (pos == null) {
+            return null;
+        }
+
         int plane = player.getWorldLocation().getPlane();
 
         BufferedImage bufferedImage = getBufferedImage();
@@ -93,9 +95,6 @@ class TileGridOverlay extends Overlay {
         graphics.drawImage(bufferedImage, 0, 0, null);
         bufferedGraphics.dispose();
 
-        long renderTime = System.nanoTime() - currentTime;
-        System.out.println("Render time: " + renderTime / 1000000.0 + "ms");
-
         return null;
     }
 
@@ -121,7 +120,7 @@ class TileGridOverlay extends Overlay {
     }
 
     // Copied and modified from Perspective.java
-    public static boolean getCanvasTilePoint(Polygon poly, @Nonnull Client client, WorldView wv, @Nonnull int localX, int localY, int plane, int zOffset) {
+    public static boolean getCanvasTilePoint(Polygon poly, @Nonnull Client client, @Nonnull WorldView wv, int localX, int localY, int plane, int zOffset) {
         int msx = (localX >> 7) + 40;
         int msy = (localY >> 7) + 40;
         if (msx >= 0 && msy >= 0 && msx < 184 && msy < 184 && wv != null) {
