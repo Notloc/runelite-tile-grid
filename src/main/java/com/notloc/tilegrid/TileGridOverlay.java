@@ -1,7 +1,6 @@
 package com.notloc.tilegrid;
 
 import java.awt.*;
-import javax.annotation.Nonnull;
 import javax.inject.Inject;
 
 import net.runelite.api.*;
@@ -56,111 +55,155 @@ class TileGridOverlay extends Overlay {
             return null;
         }
 
-        int plane = player.getWorldLocation().getPlane();
+        LocalPoint lPos = player.getLocalLocation();
 
-        BufferedImage bufferedImage = getBufferedImage();
-        Graphics2D bufferedGraphics = bufferedImage.createGraphics();
-
-        Color color = config.gridColor();
-        int alpha = color.getAlpha();
-
-        bufferedGraphics.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), 255));
-        bufferedGraphics.setStroke(new BasicStroke(1));
+        final int playerX = pos.getX();
+        final int playerY = pos.getY();
+        final int playerLX = lPos.getX();
+        final int playerLY = lPos.getY();
+        final int plane = player.getWorldLocation().getPlane();
 
         int renderRange = config.gridDistance();
-        // Remove skip the first line so that the grid is not surrounded by a box
+        int lineCount = (renderRange * 2 + 1) * renderRange * 2;
+
+        // Xs
+        int[] hLineXs = new int[lineCount * 2];
+        int[] hLineYs = new int[lineCount * 2];
+        float[] hDists = new float[lineCount];
+
+        int xi = 0;
+        int yi = 0;
+        int di = 0;
         for (int y = -renderRange+1; y <= renderRange; y++) {
-            Polygon p1 = new Polygon();
-
             for (int x = -renderRange; x <= renderRange; x++) {
-                LocalPoint lp = new LocalPoint(pos.getX() + x*128, pos.getY() + y*128, wv);
-                getCanvasTilePoint(p1, client, wv, lp.getX()-64, lp.getY()-64, plane, 0);
-                getCanvasTilePoint(p1, client, wv, lp.getX()+63, lp.getY()-64, plane, 0);
+                int xP = (playerX + x*128);
+                int yP = (playerY + y*128);
+
+                hLineXs[xi]   = xP - 64;
+                hLineXs[xi+1] = xP + 63;
+
+                hLineYs[yi]   = yP - 64;
+                hLineYs[yi+1] = yP - 64;
+
+                float xDist = (xP - playerLX) / 128f;
+                float yDist = (yP - 64 - playerLY) / 128f;
+                hDists[di] = xDist * xDist + yDist * yDist;
+
+                xi += 2;
+                yi += 2;
+                di += 1;
             }
-            bufferedGraphics.drawPolyline(p1.xpoints, p1.ypoints, p1.npoints);
         }
 
+        // Ys
+        int[] vLineXs = new int[lineCount * 2];
+        int[] vLineYs = new int[lineCount * 2];
+        float[] vDists = new float[lineCount];
+
+        xi = 0;
+        yi = 0;
+        di = 0;
         for (int x = -renderRange+1; x <= renderRange; x++) {
-            Polygon p1 = new Polygon();
             for (int y = -renderRange; y <= renderRange; y++) {
-                LocalPoint lp = new LocalPoint(pos.getX() + x*128, pos.getY() + y*128, wv);
-                getCanvasTilePoint(p1, client, wv, lp.getX()-64, lp.getY()-64, plane, 0);
-                getCanvasTilePoint(p1, client, wv, lp.getX()-64, lp.getY()+63, plane, 0);
+                int xP = (playerX + x*128);
+                int yP = (playerY + y*128);
+
+                vLineXs[xi]   = xP - 64;
+                vLineXs[xi+1] = xP - 64;
+
+                vLineYs[yi]   = yP - 64;
+                vLineYs[yi+1] = yP + 63;
+
+                float xDist = (xP - 64 - playerLX) / 128f;
+                float yDist = (yP - playerLY) / 128f;
+                vDists[di] = xDist * xDist + yDist * yDist;
+
+                xi += 2;
+                yi += 2;
+                di += 1;
             }
-            bufferedGraphics.drawPolyline(p1.xpoints, p1.ypoints, p1.npoints);
         }
 
-        applyAlpha(bufferedImage, alpha);
+        Point[] hPoints = BulkPerspective.getCanvasTilePoints(client, wv, hLineXs, hLineYs, plane);
+        Point[] vPoints = BulkPerspective.getCanvasTilePoints(client, wv, vLineXs, vLineYs, plane);
 
-        graphics.drawImage(bufferedImage, 0, 0, null);
-        bufferedGraphics.dispose();
+        {
+            BufferedImage bufferedImage = getBufferedImage();
+            Graphics2D bufferedGraphics = bufferedImage.createGraphics();
+
+            Color realColor = config.gridColor();
+            int alpha = realColor.getAlpha();
+
+            // Intentionally write the ALPHA into BLUE
+            Color alphaColor = new Color(0, 0, realColor.getAlpha(), 255);
+            // Isolate the color, with no alpha
+            int rgbInt = realColor.getRGB() & 0x00FFFFFF;
+
+            bufferedGraphics.setColor(alphaColor);
+            bufferedGraphics.setStroke(new BasicStroke(1));
+
+            int width = bufferedImage.getWidth();
+            int height = bufferedImage.getHeight();
+            drawLines(bufferedGraphics, alpha, hDists, hPoints, width, height);
+            drawLines(bufferedGraphics, alpha, vDists, vPoints, width, height);
+            applyColorAndAlpha(bufferedImage, rgbInt);
+
+            graphics.drawImage(bufferedImage, 0, 0, null);
+            bufferedGraphics.dispose();
+        }
 
         return null;
     }
 
-    // Writes an alpha value to the image's pixel data
-    // Ends up being significantly faster than drawing the image with a transparent color
-    private static void applyAlpha(BufferedImage image, int alpha) {
+    private void drawLines(Graphics2D bufferedGraphics, int alpha, float[] distances, Point[] points, int w, int h) {
+        boolean doFadeOut = config.doFadeOut();
+        int fadeOutDistanceSqr = config.fadeOutDistance() * config.fadeOutDistance();
+        double fadeOutTaper = config.fadeOutTaper() * config.fadeOutTaper();
+
+        for (int i = 0; i < points.length; i+=2) {
+            Point p1 = points[i];
+            Point p2 = points[i + 1];
+            if (p1 != null && p2 != null && inBounds(p1, p2, w, h)) {
+                if (doFadeOut) {
+                    double dist = (distances[i / 2] - fadeOutDistanceSqr) / fadeOutTaper;
+                    if (dist <= 1) {
+                        dist = 1;
+                    }
+                    Color color = new Color(0, 0, (int) (alpha / dist), 255);
+                    bufferedGraphics.setColor(color);
+                }
+                bufferedGraphics.drawLine(p1.getX(), p1.getY(), p2.getX(), p2.getY());
+            }
+        }
+    }
+
+    private static boolean inBounds(Point p1, Point p2, int w, int h) {
+        boolean xVisible = p1.getX() >= 0 || p1.getX() <= w || p2.getX() >= 0 || p2.getX() <= w;
+        boolean yVisible = p1.getY() >= 0 || p1.getY() <= h || p2.getY() >= 0 || p2.getY() <= h;
+        return xVisible && yVisible;
+    }
+
+    // Shifts the image data into the desired format.
+    // B becomes A and RGB is injected
+    // Ends up being significantly faster than just drawing the image normally with transparent colors
+    private static void applyColorAndAlpha(BufferedImage image, int rgb) {
         int[] pixels = ((DataBufferInt) image.getRaster().getDataBuffer()).getData();
         for (int i = 0; i < pixels.length; i++) {
             int pixel = pixels[i];
             if (pixel == 0) {
                 continue;
             }
-            pixels[i] = (alpha << 24) | (pixel & 0x00FFFFFF);
+            pixel = (pixel << 24) | rgb;
+            pixels[i] = pixel;
         }
     }
+
 
     // Manually clears the image, faster than using Graphics2D.clearRect and similar
     private static void clearImage(BufferedImage image) {
         int[] pixels = ((DataBufferInt) image.getRaster().getDataBuffer()).getData();
         for (int i = 0; i < pixels.length; i++) {
             pixels[i] = 0;
-        }
-    }
-
-    // Copied and modified from Perspective.java
-    public static boolean getCanvasTilePoint(Polygon poly, @Nonnull Client client, @Nonnull WorldView wv, int localX, int localY, int plane, int zOffset) {
-        int msx = (localX >> 7) + 40;
-        int msy = (localY >> 7) + 40;
-        if (msx >= 0 && msy >= 0 && msx < 184 && msy < 184 && wv != null) {
-            if (plane == -1) {
-                plane = wv.getPlane();
-            }
-
-            Scene scene = wv.getScene();
-            byte[][][] tileSettings = scene.getExtendedTileSettings();
-            int tilePlane = plane;
-            if (plane < 3 && (tileSettings[1][msx][msy] & 2) == 2) {
-                tilePlane = plane + 1;
-            }
-
-            int swHeight = getHeight(scene, localX, localY, tilePlane) - zOffset;
-            Point p1 = Perspective.localToCanvas(client, localX, localY, swHeight);
-            if (p1 != null) {
-                poly.addPoint(p1.getX(), p1.getY());
-                return true;
-            } else {
-                return false;
-            }
-        } else {
-            return false;
-        }
-    }
-
-    // Copied from Perspective.java
-    private static int getHeight(@Nonnull Scene scene, int localX, int localY, int plane) {
-        int sceneX = (localX >> 7) + 40;
-        int sceneY = (localY >> 7) + 40;
-        if (sceneX >= 0 && sceneY >= 0 && sceneX < 184 && sceneY < 184) {
-            int[][][] tileHeights = scene.getTileHeights();
-            int x = localX & 127;
-            int y = localY & 127;
-            int var8 = x * tileHeights[plane][sceneX + 1][sceneY] + (128 - x) * tileHeights[plane][sceneX][sceneY] >> 7;
-            int var9 = tileHeights[plane][sceneX][sceneY + 1] * (128 - x) + x * tileHeights[plane][sceneX + 1][sceneY + 1] >> 7;
-            return (128 - y) * var8 + y * var9 >> 7;
-        } else {
-            return 0;
         }
     }
 }
