@@ -24,10 +24,6 @@ class TileGridOverlay extends Overlay {
 
     private BufferedImage _bufferedImage;
 
-    private ArrayList<Long> totalTimes = new ArrayList<>();
-    private ArrayList<Long> buildTimes = new ArrayList<>();
-    private ArrayList<Long> renderTimes = new ArrayList<>();
-
     /* NOTE:
      * Polygons when viewed from the top down, north, begin in the bottom left corner and wind counter-clockwise.
      */
@@ -52,8 +48,6 @@ class TileGridOverlay extends Overlay {
 
     @Override
     public Dimension render(Graphics2D graphics) {
-        long startTime = System.nanoTime();
-
         Player player = client.getLocalPlayer();
         WorldView wv = client.getTopLevelWorldView();
 
@@ -70,19 +64,6 @@ class TileGridOverlay extends Overlay {
         final int playerLX = lPos.getX();
         final int playerLY = lPos.getY();
         final int plane = player.getWorldLocation().getPlane();
-
-        BufferedImage bufferedImage = getBufferedImage();
-        Graphics2D bufferedGraphics = bufferedImage.createGraphics();
-
-        Color realColor = config.gridColor();
-        int alpha = realColor.getAlpha();
-
-        // We write the alpha into the B component for now
-        Color alphaColor = new Color(0, 0, realColor.getAlpha(), 255);
-        int rgbInt = realColor.getRGB() & 0x00FFFFFF; // Removes the alpha component
-
-        bufferedGraphics.setColor(alphaColor);
-        bufferedGraphics.setStroke(new BasicStroke(1));
 
         int renderRange = config.gridDistance();
         int lineCount = (renderRange * 2 + 1) * renderRange * 2;
@@ -145,54 +126,47 @@ class TileGridOverlay extends Overlay {
             }
         }
 
-        long buildStart =  System.nanoTime();
         Point[] hPoints = BulkPerspective.getCanvasTilePoint(client, wv, hLineXs, hLineYs, plane);
         Point[] vPoints = BulkPerspective.getCanvasTilePoint(client, wv, vLineXs, vLineYs, plane);
-        long buildTime = System.nanoTime() - buildStart;
 
-        int fadeOutDistanceSqr = config.fadeOutDistance() * config.fadeOutDistance();
-        double fadeOutTaper = config.fadeOutTaper() * config.fadeOutTaper();
-        int width = bufferedImage.getWidth();
-        int height = bufferedImage.getHeight();
+        {
+            BufferedImage bufferedImage = getBufferedImage();
+            Graphics2D bufferedGraphics = bufferedImage.createGraphics();
 
-        drawLines(bufferedGraphics, alpha, hDists, hPoints, fadeOutDistanceSqr, fadeOutTaper, width, height);
-        drawLines(bufferedGraphics, alpha, vDists, vPoints, fadeOutDistanceSqr, fadeOutTaper, width, height);
+            Color realColor = config.gridColor();
+            int alpha = realColor.getAlpha();
 
-        applyColorAndAlpha(bufferedImage, rgbInt);
-        graphics.drawImage(bufferedImage, 0, 0, null);
-        bufferedGraphics.dispose();
+            // Intentionally write the ALPHA into BLUE
+            Color alphaColor = new Color(0, 0, realColor.getAlpha(), 255);
+            // Isolate the color, with no alpha
+            int rgbInt = realColor.getRGB() & 0x00FFFFFF;
 
-        long totalTime = System.nanoTime() - startTime;
-        long renderTime = totalTime - buildTime;
+            bufferedGraphics.setColor(alphaColor);
+            bufferedGraphics.setStroke(new BasicStroke(1));
 
-        if (totalTimes.size() > 500) {
-            totalTimes.clear();
-            renderTimes.clear();
-            buildTimes.clear();
-        }
-        totalTimes.add(totalTime);
-        buildTimes.add(buildTime);
-        renderTimes.add(renderTime);
+            int width = bufferedImage.getWidth();
+            int height = bufferedImage.getHeight();
+            drawLines(bufferedGraphics, alpha, hDists, hPoints, width, height);
+            drawLines(bufferedGraphics, alpha, vDists, vPoints, width, height);
+            applyColorAndAlpha(bufferedImage, rgbInt);
 
-        if (totalTimes.size() % 20 == 0) {
-            System.out.println("Build time: " + buildTime / 1000000.0 + "ms");
-
-            System.out.println("Render time: " + renderTime / 1000000.0 + "ms");
-
-            System.out.println("Total time: " + totalTime / 1000000.0 + "ms");
-            long averageRenderTime = totalTimes.stream().mapToLong(Long::longValue).sum() / totalTimes.size();
-            System.out.println("Average Total time: " + averageRenderTime / 1000000.0 + "ms");
+            graphics.drawImage(bufferedImage, 0, 0, null);
+            bufferedGraphics.dispose();
         }
 
         return null;
     }
 
-    private void drawLines(Graphics2D bufferedGraphics, int alpha, float[] distances, Point[] points, int fadeOutDistanceSqr, double fadeOutTaper, int w, int h) {
+    private void drawLines(Graphics2D bufferedGraphics, int alpha, float[] distances, Point[] points, int w, int h) {
+        boolean doFadeOut = config.doFadeOut();
+        int fadeOutDistanceSqr = config.fadeOutDistance() * config.fadeOutDistance();
+        double fadeOutTaper = config.fadeOutTaper() * config.fadeOutTaper();
+
         for (int i = 0; i < points.length; i+=2) {
             Point p1 = points[i];
             Point p2 = points[i + 1];
             if (p1 != null && p2 != null && inBounds(p1, p2, w, h)) {
-                if (fadeOutDistanceSqr > 0) {
+                if (doFadeOut) {
                     double dist = (distances[i / 2] - fadeOutDistanceSqr) / fadeOutTaper;
                     if (dist <= 1) {
                         dist = 1;
