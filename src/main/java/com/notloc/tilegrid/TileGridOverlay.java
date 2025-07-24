@@ -95,19 +95,19 @@ class TileGridOverlay extends Overlay {
         int xi = 0;
         int yi = 0;
         int di = 0;
-        for (int y = -renderRange; y <= renderRange; y++) {
-            for (int x = -renderRange+1; x <= renderRange; x++) {
+        for (int y = -renderRange+1; y <= renderRange; y++) {
+            for (int x = -renderRange; x <= renderRange; x++) {
                 int xP = (playerX + x*128);
                 int yP = (playerY + y*128);
 
                 hLineXs[xi]   = xP - 64;
-                hLineXs[xi+1] = xP - 64;
+                hLineXs[xi+1] = xP + 63;
 
                 hLineYs[yi]   = yP - 64;
-                hLineYs[yi+1] = yP + 63;
+                hLineYs[yi+1] = yP - 64;
 
-                float xDist = (xP - 64 - playerLX) / 128f;
-                float yDist = (yP - playerLY) / 128f;
+                float xDist = (xP - playerLX) / 128f;
+                float yDist = (yP - 64 - playerLY) / 128f;
                 hDists[di] = xDist * xDist + yDist * yDist;
 
                 xi += 2;
@@ -124,19 +124,19 @@ class TileGridOverlay extends Overlay {
         xi = 0;
         yi = 0;
         di = 0;
-        for (int x = -renderRange; x <= renderRange; x++) {
-            for (int y = -renderRange+1; y <= renderRange; y++) {
+        for (int x = -renderRange+1; x <= renderRange; x++) {
+            for (int y = -renderRange; y <= renderRange; y++) {
                 int xP = (playerX + x*128);
                 int yP = (playerY + y*128);
 
                 vLineXs[xi]   = xP - 64;
-                vLineXs[xi+1] = xP + 63;
+                vLineXs[xi+1] = xP - 64;
 
                 vLineYs[yi]   = yP - 64;
-                vLineYs[yi+1] = yP - 64;
+                vLineYs[yi+1] = yP + 63;
 
-                float xDist = (xP - playerLX) / 128f;
-                float yDist = (yP - 64 - playerLY) / 128f;
+                float xDist = (xP - 64 - playerLX) / 128f;
+                float yDist = (yP - playerLY) / 128f;
                 vDists[di] = xDist * xDist + yDist * yDist;
 
                 xi += 2;
@@ -152,9 +152,11 @@ class TileGridOverlay extends Overlay {
 
         int fadeOutDistanceSqr = config.fadeOutDistance() * config.fadeOutDistance();
         double fadeOutTaper = config.fadeOutTaper() * config.fadeOutTaper();
+        int width = bufferedImage.getWidth();
+        int height = bufferedImage.getHeight();
 
-        drawLines(bufferedGraphics, alpha, hDists, hPoints, fadeOutDistanceSqr, fadeOutTaper);
-        drawLines(bufferedGraphics, alpha, vDists, vPoints, fadeOutDistanceSqr, fadeOutTaper);
+        drawLines(bufferedGraphics, alpha, hDists, hPoints, fadeOutDistanceSqr, fadeOutTaper, width, height);
+        drawLines(bufferedGraphics, alpha, vDists, vPoints, fadeOutDistanceSqr, fadeOutTaper, width, height);
 
         applyColorAndAlpha(bufferedImage, rgbInt);
         graphics.drawImage(bufferedImage, 0, 0, null);
@@ -185,11 +187,11 @@ class TileGridOverlay extends Overlay {
         return null;
     }
 
-    private void drawLines(Graphics2D bufferedGraphics, int alpha, float[] distances, Point[] points, int fadeOutDistanceSqr, double fadeOutTaper) {
+    private void drawLines(Graphics2D bufferedGraphics, int alpha, float[] distances, Point[] points, int fadeOutDistanceSqr, double fadeOutTaper, int w, int h) {
         for (int i = 0; i < points.length; i+=2) {
             Point p1 = points[i];
             Point p2 = points[i + 1];
-            if (p1 != null && p2 != null) {
+            if (p1 != null && p2 != null && inBounds(p1, p2, w, h)) {
                 if (fadeOutDistanceSqr > 0) {
                     double dist = (distances[i / 2] - fadeOutDistanceSqr) / fadeOutTaper;
                     if (dist <= 1) {
@@ -198,10 +200,15 @@ class TileGridOverlay extends Overlay {
                     Color color = new Color(0, 0, (int) (alpha / dist), 255);
                     bufferedGraphics.setColor(color);
                 }
-
                 bufferedGraphics.drawLine(p1.getX(), p1.getY(), p2.getX(), p2.getY());
             }
         }
+    }
+
+    private static boolean inBounds(Point p1, Point p2, int w, int h) {
+        boolean xVisible = p1.getX() >= 0 || p1.getX() <= w || p2.getX() >= 0 || p2.getX() <= w;
+        boolean yVisible = p1.getY() >= 0 || p1.getY() <= h || p2.getY() >= 0 || p2.getY() <= h;
+        return xVisible && yVisible;
     }
 
     // Shifts the image data into the desired format.
