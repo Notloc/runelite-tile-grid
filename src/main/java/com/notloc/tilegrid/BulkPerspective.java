@@ -15,7 +15,7 @@ public class BulkPerspective {
 
     private static final int INVALID_INT = Integer.MIN_VALUE;
 
-    public static Point[] getCanvasTilePoint(@Nonnull Client client, @Nonnull WorldView wv, int[] localXL, int[] localYL, int plane) {
+    public static Point[] getCanvasTilePoints(@Nonnull Client client, @Nonnull WorldView wv, int[] localXL, int[] localYL, int plane) {
         Scene scene = wv.getScene();
 
         int[] planes = new int[localXL.length];

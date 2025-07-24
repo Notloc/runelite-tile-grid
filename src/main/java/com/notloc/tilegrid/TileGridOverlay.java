@@ -1,7 +1,6 @@
 package com.notloc.tilegrid;
 
 import java.awt.*;
-import javax.annotation.Nonnull;
 import javax.inject.Inject;
 
 import net.runelite.api.*;
@@ -16,7 +15,6 @@ import net.runelite.api.coords.LocalPoint;
 
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferInt;
-import java.util.ArrayList;
 
 class TileGridOverlay extends Overlay {
     private final Client client;
@@ -126,8 +124,8 @@ class TileGridOverlay extends Overlay {
             }
         }
 
-        Point[] hPoints = BulkPerspective.getCanvasTilePoint(client, wv, hLineXs, hLineYs, plane);
-        Point[] vPoints = BulkPerspective.getCanvasTilePoint(client, wv, vLineXs, vLineYs, plane);
+        Point[] hPoints = BulkPerspective.getCanvasTilePoints(client, wv, hLineXs, hLineYs, plane);
+        Point[] vPoints = BulkPerspective.getCanvasTilePoints(client, wv, vLineXs, vLineYs, plane);
 
         {
             BufferedImage bufferedImage = getBufferedImage();
