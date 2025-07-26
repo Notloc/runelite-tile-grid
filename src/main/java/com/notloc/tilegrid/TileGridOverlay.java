@@ -22,9 +22,11 @@ class TileGridOverlay extends Overlay {
 
     private BufferedImage _bufferedImage;
 
-    /* NOTE:
-     * Polygons when viewed from the top down, north, begin in the bottom left corner and wind counter-clockwise.
-     */
+    private static final int UNWALKABLE_MASK =
+                CollisionDataFlag.BLOCK_MOVEMENT_FULL |
+                CollisionDataFlag.BLOCK_MOVEMENT_FLOOR |
+                CollisionDataFlag.BLOCK_MOVEMENT_OBJECT |
+                CollisionDataFlag.BLOCK_MOVEMENT_FLOOR_DECORATION;
 
     @Inject
     private TileGridOverlay(Client client, TileGridConfig config) {
@@ -48,23 +50,37 @@ class TileGridOverlay extends Overlay {
     public Dimension render(Graphics2D graphics) {
         Player player = client.getLocalPlayer();
         WorldView wv = client.getTopLevelWorldView();
-
-        WorldPoint wPos = player.getWorldLocation();
-        LocalPoint pos = LocalPoint.fromWorld(wv, wPos);
-        if (pos == null) {
+        if (wv == null) {
             return null;
         }
 
-        LocalPoint lPos = player.getLocalLocation();
+        WorldPoint wPos = player.getWorldLocation();
+        LocalPoint truePos = LocalPoint.fromWorld(wv, wPos);
+        LocalPoint smoothPos = player.getLocalLocation();
+        if (truePos == null) {
+            return null;
+        }
 
-        final int playerX = pos.getX();
-        final int playerY = pos.getY();
-        final int playerLX = lPos.getX();
-        final int playerLY = lPos.getY();
+        final int playerTrueX = truePos.getX();
+        final int playerTrueY = truePos.getY();
+        final int playerSmoothX = smoothPos.getX();
+        final int playerSmoothY = smoothPos.getY();
         final int plane = player.getWorldLocation().getPlane();
 
-        int renderRange = config.gridDistance();
-        int lineCount = (renderRange * 2 + 1) * renderRange * 2;
+
+        int[][] collisionData = null;
+        boolean doWalkableCheck = config.doWalkableCheck();
+        if (doWalkableCheck) {
+            CollisionData[] collisionDataList = wv.getCollisionMaps();
+            if (collisionDataList != null && plane >= 0 && plane < collisionDataList.length) {
+                collisionData = collisionDataList[plane].getFlags();
+            } else {
+                doWalkableCheck = false;
+            }
+        }
+
+        int renderRadius = config.gridDistance();
+        int lineCount = (renderRadius * 2 + 1) * renderRadius * 2;
 
         // Xs
         int[] hLineXs = new int[lineCount * 2];
@@ -74,28 +90,48 @@ class TileGridOverlay extends Overlay {
         int xi = 0;
         int yi = 0;
         int di = 0;
-        for (int y = -renderRange+1; y <= renderRange; y++) {
-            for (int x = -renderRange; x <= renderRange; x++) {
-                int xP = (playerX + x*128);
-                int yP = (playerY + y*128);
+        boolean previousTileBlocked;
+        for (int x = -renderRadius; x <= renderRadius; x++) {
+            int xP = (playerTrueX + x*128);
+            int tileX = xP / 128;
 
-                hLineXs[xi]   = xP - 64;
-                hLineXs[xi+1] = xP + 63;
+            previousTileBlocked = true;
+            for (int y = -renderRadius+1; y <= renderRadius; y++) {
+                int yP = (playerTrueY + y*128);
+                int tileY = yP / 128;
 
-                hLineYs[yi]   = yP - 64;
-                hLineYs[yi+1] = yP - 64;
+                boolean isBlocked = false;
+                if (doWalkableCheck && tileX >= 5 && tileX < 99 && tileY >= 5 && tileY < 99) {
+                    int collisionMask = collisionData[tileX][tileY];
+                    isBlocked = (collisionMask & UNWALKABLE_MASK) != 0;
+                }
+                int correction = isBlocked ? 1 : 0;
 
-                float xDist = (xP - playerLX) / 128f;
-                float yDist = (yP - 64 - playerLY) / 128f;
-                hDists[di] = xDist * xDist + yDist * yDist;
+                if (isBlocked && previousTileBlocked) {
+                    hLineXs[xi] = Integer.MIN_VALUE;
+                    hLineXs[xi+1] = Integer.MIN_VALUE;
+                    hLineYs[yi] = Integer.MIN_VALUE;
+                    hLineYs[yi+1] = Integer.MIN_VALUE;
+                } else {
+                    hLineXs[xi]   = xP - 64;
+                    hLineXs[xi+1] = xP + 63;
 
+                    hLineYs[yi]   = yP - 64 - correction;
+                    hLineYs[yi+1] = yP - 64 - correction;
+
+                    float xDist = (xP - playerSmoothX) / 128f;
+                    float yDist = (yP - 64 - playerSmoothY) / 128f;
+                    hDists[di] = xDist * xDist + yDist * yDist;
+                }
+
+                previousTileBlocked = isBlocked;
                 xi += 2;
                 yi += 2;
                 di += 1;
             }
         }
 
-        // Ys
+        // Vertical Lines
         int[] vLineXs = new int[lineCount * 2];
         int[] vLineYs = new int[lineCount * 2];
         float[] vDists = new float[lineCount];
@@ -103,21 +139,45 @@ class TileGridOverlay extends Overlay {
         xi = 0;
         yi = 0;
         di = 0;
-        for (int x = -renderRange+1; x <= renderRange; x++) {
-            for (int y = -renderRange; y <= renderRange; y++) {
-                int xP = (playerX + x*128);
-                int yP = (playerY + y*128);
+        for (int y = -renderRadius; y <= renderRadius; y++) {
+            int yP = (playerTrueY + y*128);
+            int tileY = yP / 128;
 
-                vLineXs[xi]   = xP - 64;
-                vLineXs[xi+1] = xP - 64;
+            previousTileBlocked = true;
+            for (int x = -renderRadius+1; x <= renderRadius; x++) {
+                int xP = (playerTrueX + x*128);
+                int tileX = xP / 128;
 
-                vLineYs[yi]   = yP - 64;
-                vLineYs[yi+1] = yP + 63;
+                boolean isBlocked = false;
+                if (doWalkableCheck && tileX >= 5 && tileX < 99 && tileY >= 5 && tileY < 99) {
+                    int collisionMask = collisionData[tileX][tileY];
+                    isBlocked = (collisionMask & UNWALKABLE_MASK) != 0;
+                }
 
-                float xDist = (xP - 64 - playerLX) / 128f;
-                float yDist = (yP - playerLY) / 128f;
-                vDists[di] = xDist * xDist + yDist * yDist;
+                // Used to move the calculation onto the edge of the previous tile
+                // This way, a walkable tile next to an unwalkable tile with a large height difference
+                // (i.e. a bridges), will have all its sides rendered at bridge level, instead of some at water level.
+                int correction = isBlocked ? 1 : 0;
 
+                if (isBlocked && previousTileBlocked) {
+                    vLineXs[xi] = Integer.MIN_VALUE;
+                    vLineXs[xi+1] = Integer.MIN_VALUE;
+
+                    vLineYs[yi] = Integer.MIN_VALUE;
+                    vLineYs[yi+1] = Integer.MIN_VALUE;
+                } else {
+                    vLineXs[xi]   = xP - 64 - correction;
+                    vLineXs[xi+1] = xP - 64 - correction;
+
+                    vLineYs[yi]   = yP - 64;
+                    vLineYs[yi+1] = yP + 63;
+
+                    float xDist = (xP - 64 - playerSmoothX) / 128f;
+                    float yDist = (yP - playerSmoothY) / 128f;
+                    vDists[di] = xDist * xDist + yDist * yDist;
+                }
+
+                previousTileBlocked = isBlocked;
                 xi += 2;
                 yi += 2;
                 di += 1;
@@ -197,7 +257,6 @@ class TileGridOverlay extends Overlay {
             pixels[i] = pixel;
         }
     }
-
 
     // Manually clears the image, faster than using Graphics2D.clearRect and similar
     private static void clearImage(BufferedImage image) {

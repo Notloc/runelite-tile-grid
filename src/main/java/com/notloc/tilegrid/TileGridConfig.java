@@ -12,7 +12,7 @@ public interface TileGridConfig extends Config
 			keyName = "gridcolor",
 			name = "Grid Color",
 			description = "The color of the tile grid.",
-			position = 0
+			position = 10
 	)
 	default Color gridColor() { return new Color(0, 0, 0, 48); }
 
@@ -21,15 +21,23 @@ public interface TileGridConfig extends Config
 			keyName = "griddistance",
 			name = "Draw Distance",
 			description = "The max distance from the player to draw the tile grid.",
-			position = 2
+			position = 20
 	)
 	default int gridDistance() { return 16; }
+
+	@ConfigItem(
+			keyName = "do-walkable-check",
+			name = "Only Walkable Tiles?",
+			description = "Only draw grid tiles that are walkable?",
+			position = 25
+	)
+	default boolean doWalkableCheck() { return true; }
 
 	@ConfigItem(
 			keyName = "do-fade-out",
 			name = "Fade Out?",
 			description = "Should grid tiles in the distance fade out?",
-			position = 3
+			position = 30
 	)
 	default boolean doFadeOut() { return true; }
 
@@ -38,7 +46,7 @@ public interface TileGridConfig extends Config
 			keyName = "fade-out-dist",
 			name = "Fade Out Distance",
 			description = "Grid tiles beyond this distance begin to fade out.",
-			position = 4
+			position = 40
 	)
 	default int fadeOutDistance() { return 2; }
 
@@ -47,7 +55,7 @@ public interface TileGridConfig extends Config
 			keyName = "fade-out-taper",
 			name = "Fade Out Taper",
 			description = "A stronger taper makes tiles take longer to fade out.",
-			position = 5
+			position = 50
 	)
 	default int fadeOutTaper() { return 8; }
 }

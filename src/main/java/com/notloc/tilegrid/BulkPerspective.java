@@ -95,10 +95,6 @@ public class BulkPerspective {
 
         Point[] points = new Point[xL.length];
 
-        int prevX = INVALID_INT;
-        int prevY = INVALID_INT;
-        int prevZ = INVALID_INT;
-
         for (int i=0; i<xL.length; i++) {
             int x = xL[i];
             int y = yL[i];
