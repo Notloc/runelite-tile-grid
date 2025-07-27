@@ -67,7 +67,6 @@ class TileGridOverlay extends Overlay {
         final int playerSmoothY = smoothPos.getY();
         final int plane = player.getWorldLocation().getPlane();
 
-
         int[][] collisionData = null;
         boolean doWalkableCheck = config.doWalkableCheck();
         if (doWalkableCheck) {
@@ -191,7 +190,8 @@ class TileGridOverlay extends Overlay {
             BufferedImage bufferedImage = getBufferedImage();
             Graphics2D bufferedGraphics = bufferedImage.createGraphics();
 
-            Color realColor = config.gridColor();
+            boolean isOverworld = WorldPoint.getMirrorPoint(wPos, true).getY() < Constants.OVERWORLD_MAX_Y;
+            Color realColor = isOverworld ? config.overworldGridColor() : config.otherGridColor();
             int alpha = realColor.getAlpha();
 
             // Intentionally write the ALPHA into BLUE
@@ -200,7 +200,7 @@ class TileGridOverlay extends Overlay {
             int rgbInt = realColor.getRGB() & 0x00FFFFFF;
 
             bufferedGraphics.setColor(alphaColor);
-            bufferedGraphics.setStroke(new BasicStroke(1));
+            bufferedGraphics.setStroke(new BasicStroke(config.lineThickness()));
 
             int width = bufferedImage.getWidth();
             int height = bufferedImage.getHeight();
